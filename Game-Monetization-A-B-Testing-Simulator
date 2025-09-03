@@ -1,0 +1,95 @@
+# ab_testing_simulator.py
+import streamlit as st
+import pandas as pd
+import numpy as np
+from scipy.stats import ttest_ind
+import plotly.express as px
+
+st.set_page_config(page_title="Game Monetization & A/B Testing Simulator", layout="wide")
+st.title("🎮 Game Monetization & A/B Testing Simulator")
+
+# -------------------------------
+# 1. Simulate Player Data
+# -------------------------------
+np.random.seed(42)
+num_players = 1000
+
+# Variant A
+variant_a = pd.DataFrame({
+    'player_id': range(1, num_players+1),
+    'revenue': np.random.normal(loc=10, scale=5, size=num_players),  # ARPU ~ $10
+    'ltv': np.random.normal(loc=50, scale=20, size=num_players)
+})
+variant_a['variant'] = 'A'
+
+# Variant B
+variant_b = pd.DataFrame({
+    'player_id': range(num_players+1, 2*num_players+1),
+    'revenue': np.random.normal(loc=12, scale=5, size=num_players),  # ARPU ~ $12
+    'ltv': np.random.normal(loc=55, scale=20, size=num_players)
+})
+variant_b['variant'] = 'B'
+
+data = pd.concat([variant_a, variant_b])
+
+# Clip negative revenue/LTV to 0
+data['revenue'] = data['revenue'].clip(0)
+data['ltv'] = data['ltv'].clip(0)
+
+# -------------------------------
+# 2. Summary Metrics
+# -------------------------------
+st.subheader("📊 ARPU & LTV Summary")
+summary = data.groupby('variant')[['revenue', 'ltv']].mean().reset_index()
+summary = summary.rename(columns={'revenue': 'ARPU', 'ltv': 'LTV'})
+st.dataframe(summary)
+
+# -------------------------------
+# 3. Visualizations
+# -------------------------------
+st.subheader("💹 Revenue & LTV Distributions")
+
+fig_revenue = px.box(data, x='variant', y='revenue', color='variant', title="ARPU Distribution")
+st.plotly_chart(fig_revenue, use_container_width=True)
+
+fig_ltv = px.box(data, x='variant', y='ltv', color='variant', title="LTV Distribution")
+st.plotly_chart(fig_ltv, use_container_width=True)
+
+# -------------------------------
+# 4. A/B Testing with T-Tests
+# -------------------------------
+st.subheader("🔬 A/B Testing Results")
+
+# ARPU t-test
+arpu_ttest = ttest_ind(variant_a['revenue'], variant_b['revenue'])
+st.write(f"ARPU T-Test: t-stat={arpu_ttest.statistic:.3f}, p-value={arpu_ttest.pvalue:.3f}")
+if arpu_ttest.pvalue < 0.05:
+    st.success("Variant B has statistically higher ARPU than Variant A")
+else:
+    st.info("No significant difference in ARPU between variants")
+
+# LTV t-test
+ltv_ttest = ttest_ind(variant_a['ltv'], variant_b['ltv'])
+st.write(f"LTV T-Test: t-stat={ltv_ttest.statistic:.3f}, p-value={ltv_ttest.pvalue:.3f}")
+if ltv_ttest.pvalue < 0.05:
+    st.success("Variant B has statistically higher LTV than Variant A")
+else:
+    st.info("No significant difference in LTV between variants")
+
+# -------------------------------
+# 5. Interactive Simulator
+# -------------------------------
+st.sidebar.header("⚙️ Simulator Settings")
+mean_revenue_a = st.sidebar.slider("Variant A Mean ARPU", 5, 20, 10)
+mean_revenue_b = st.sidebar.slider("Variant B Mean ARPU", 5, 20, 12)
+mean_ltv_a = st.sidebar.slider("Variant A Mean LTV", 20, 100, 50)
+mean_ltv_b = st.sidebar.slider("Variant B Mean LTV", 20, 100, 55)
+
+if st.sidebar.button("Run Simulation"):
+    variant_a['revenue'] = np.random.normal(loc=mean_revenue_a, scale=5, size=num_players).clip(0)
+    variant_b['revenue'] = np.random.normal(loc=mean_revenue_b, scale=5, size=num_players).clip(0)
+    variant_a['ltv'] = np.random.normal(loc=mean_ltv_a, scale=20, size=num_players).clip(0)
+    variant_b['ltv'] = np.random.normal(loc=mean_ltv_b, scale=20, size=num_players).clip(0)
+    data = pd.concat([variant_a, variant_b])
+
+    st.success("Simulation updated! Check metrics and t-tests above.")
